@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <title>Cardboard Revenge - Alishan Hassan</title>
+
+  <style>
+  body {
+    margin: 0px;
+    overflow: hidden;
+  }
+  #webglviewer {
+    bottom: 0;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+  </style>
+
+
+</head>
+<body>
+
+  <div id="webglviewer"></div>
+
+
+
+  <script src="./js/three.min.js"></script>
+  <script src="./js/StereoEffect.js"></script>
+  <script src="./js/DeviceOrientationControls.js"></script>
+  <script src="./js/OrbitControls.js"></script>
+  <script src="./js/helvetiker_regular.typeface.js"></script>
+
+  <script>
+  //This is where we'll be tossing all of the webgl stuff.
+
+  var scene,
+  camera,
+  renderer,
+  element,
+  container,
+  effect,
+  controls,
+  clock;
+
+  var score = 100;
+
+  var planet;
+
+
+
+  //bullets
+  var objectList = new Array();
+  var numObjects = 0;
+
+  var bullet = function(x, y, z) {
+    this.type = "bullet";
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.speed = 0.5;
+
+    this.angleX = camera.rotation.x;
+    this.angleY = camera.rotation.y;
+    this.angleZ = camera.rotation.z;
+
+
+
+    var bulletGeometry = new THREE.SphereGeometry( 1, 10, 10 );
+    //var material = new THREE.MeshBasicMaterial( { color: 0x93FFE9 } );
+    var bulletTexture = THREE.ImageUtils.loadTexture('textures/lightning.jpg', THREE.SphericalRefractionMapping);
+    bulletTexture.wrapS = THREE.RepeatWrapping;
+    bulletTexture.wrapT = THREE.RepeatWrapping;
+    bulletTexture.anisotropy = renderer.getMaxAnisotropy();
+
+    var bulletMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffffff,
+      specular: 0xffffff,
+      shininess: 50,
+      shading: THREE.FlatShading,
+      map: bulletTexture
+    });
+
+    var bullet = new THREE.Mesh( bulletGeometry, bulletMaterial );
+    scene.add(bullet);
+
+    bullet.position.x = x;
+    bullet.position.y = y;
+    bullet.position.z = z;
+
+
+
+    this.mesh = new Array();
+    this.meshx = new Array();
+    this.meshy = new Array();
+    this.meshz = new Array();
+    this.mesh.push(bullet);
+    this.meshx.push(0);
+    this.meshy.push(0);
+    this.meshz.push(0);
+
+    numObjects++;
+  };
+
+
+  var enemy = function(x, y, z) {
+    this.type = "enemy";
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.speed = 0.5;
+
+    this.angleX = camera.rotation.x;
+    this.angleY = camera.rotation.y;
+    this.angleZ = camera.rotation.z;
+
+    var enemyGeometry = new THREE.TetrahedronGeometry(15, 0);
+    //var material = new THREE.MeshBasicMaterial( { color: 0x93FFE9 } );
+    var enemyTexture = THREE.ImageUtils.loadTexture('textures/sand.jpg');
+    enemyTexture.wrapS = THREE.RepeatWrapping;
+    enemyTexture.wrapT = THREE.RepeatWrapping;
+    enemyTexture.anisotropy = renderer.getMaxAnisotropy();
+
+    var enemyMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffffff,
+      specular: 0xffffff,
+      shininess: 50,
+      shading: THREE.FlatShading,
+      map: enemyTexture
+    });
+
+    var enemy = new THREE.Mesh( enemyGeometry, enemyMaterial );
+    scene.add(enemy);
+
+    enemy.position.x = x;
+    enemy.position.y = y;
+    enemy.position.z = z;
+
+
+
+    this.mesh = new Array();
+    this.meshx = new Array();
+    this.meshy = new Array();
+    this.meshz = new Array();
+    this.mesh.push(enemy);
+    this.meshx.push(0);
+    this.meshy.push(0);
+    this.meshz.push(0);
+
+    numObjects++;
+  };
+
+
+
+  var enemyattack = function(object) {
+    if (object.x < camera.position.x)
+    object.x += object.speed;
+    else
+    object.x -= object.speed;
+    if (object.y < camera.position.y)
+    object.y += object.speed;
+    else
+    object.y -= object.speed;
+    if (object.z < camera.position.z)
+    object.z += object.speed;
+    else
+    object.z -= object.speed;
+  };
+
+
+  var bulletPath = function(object) {
+    object.x += -object.speed*Math.sin(object.angleY);
+    object.y += object.speed*Math.sin(object.angleX);
+    object.z += -object.speed*Math.cos(object.angleY);
+
+
+  }
+
+  var move = function(object) {
+    for (var i = 0; i < object.mesh.length; i++) {
+      object.mesh[i].position.x = object.x + object.meshx[i];
+      object.mesh[i].position.y = object.y + object.meshy[i];
+      object.mesh[i].position.z = object.z + object.meshz[i];
+    }
+  }
+
+
+  //this was for initial debugging
+  //keyboard controls
+  var keysDown = {};
+  var keysUp = {};
+  addEventListener("keydown", function (e) {
+    keysDown[e.keyCode] = true;
+  }, false);
+  addEventListener("keyup", function (e) {
+    keysUp[e.keyCode] = true;
+    delete keysDown[e.keyCode];
+  }, false);
+
+  var key = new Array(); //http://learningthreejs.com/data/THREEx/docs/THREEx.KeyboardState.html
+  key["spacebar"] = 32;
+
+  var keyboardControls = function() {
+
+
+    if (key["spacebar"] in keysDown && !(key["spacebar"] in keysUp)) {
+
+      objectList[numObjects] = new bullet(0,0,0);
+      keysUp[key["spacebar"]] = true;
+    }
+
+    if (!(key["spacebar"] in keysDown)) {
+      delete keysUp[key["spacebar"]];
+    }
+
+  };
+//end keyboard inputs
+
+  var collisions = function() {
+    for (var i = 0; i < numObjects; i++)
+    {
+      if(objectList[i].type == "enemy" &&
+      objectList[i].x < camera.position.x + 15 &&
+      objectList[i].x > camera.position.x - 15 &&
+      objectList[i].y < camera.position.x + 15 &&
+      objectList[i].y > camera.position.x - 15 &&
+      objectList[i].z < camera.position.x + 15 &&
+      objectList[i].z > camera.position.x - 15
+    )
+    {
+      score -= 100;
+      console.log(score);
+      console.log("you got hit");
+
+      for (var k = 0; k < objectList[i].mesh.length; k++) {
+        scene.remove(objectList[i].mesh[k]);
+      }
+      scene.remove(objectList[i]);
+
+
+    }
+
+    for (var j = i + 1; j < numObjects; j++)
+    {
+      var hitbox = 5;
+      if ((objectList[i].x < (objectList[j].x + hitbox)) && (objectList[i].x > (objectList[j].x - hitbox)) &&
+      objectList[i].y < objectList[j].y + hitbox && objectList[i].y > objectList[j].y -hitbox &&
+      objectList[i].z < objectList[j].z + hitbox && objectList[i].z > objectList[j].z -hitbox)
+      {
+        console.log("collision occured!");
+        if((objectList[i].type == "bullet" || objectList[j].type == "bullet") &&
+        (objectList[i].type == "enemy" || objectList[j].type == "enemy"))
+        {
+          score += 1;
+          console.log(score);
+          console.log("bullet hit");
+          //scene.remove(objectList[i]);
+          //scene.remove(objectList[j]);
+          if(objectList[i].type == "enemy")
+          {
+            for (var k = 0; k < objectList[i].mesh.length; k++) {
+              scene.remove(objectList[i].mesh[k]);
+              scene.remove(objectList[i]);
+            }
+          }
+
+          if(objectList[j].type == "enemy")
+          {
+            for (var k = 0; k < objectList[j].mesh.length; k++) {
+              scene.remove(objectList[j].mesh[k]);
+              scene.remove(objectList[j]);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+function init()
+{
+  scene = new THREE.Scene();
+
+  console.log("Hello");
+
+  //camera
+  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 5, 700); //(fov, aspect, near, far)
+  camera.position.set(0, 15, 0); //start in the middle at a height of 15
+  scene.add(camera);
+
+  //renderer stuff
+  renderer = new THREE.WebGLRenderer();
+  renderer.setClearColor(0x8866FF);
+
+
+  element = renderer.domElement;
+  container = document.getElementById('webglviewer');
+  container.appendChild(element);
+
+
+  //steroscropic, man, that's why it's VIRTUAL REALITY O_O
+  effect = new THREE.StereoEffect(renderer);
+
+  //controls
+  controls = new THREE.OrbitControls(camera, element);
+  controls.target.set(
+    camera.position.x + .15,
+    camera.position.y,
+    camera.position.z
+  );
+
+  //disable these when debugging
+  //controls.noPan = true;
+  controls.noZoom = true;
+
+
+  //use device orientation when on Android, otherwise use the mouse
+  function setOrientationControls(e) {
+    if (!e.alpha) {
+      return;
+    }
+
+    controls = new THREE.DeviceOrientationControls(camera, true);
+    controls.connect();
+    controls.update();
+
+    element.addEventListener('click', fullscreen, false);
+
+    window.removeEventListener('deviceorientation', setOrientationControls, true);
+  }
+  window.addEventListener('deviceorientation', setOrientationControls, true);
+
+
+  // Lighting
+  var light1 = new THREE.PointLight(0xFF88AA, 2, 100);
+  light1.position.set(50, 70, 100);
+  scene.add(light1);
+
+  var light2 = new THREE.PointLight(0x9977FF, 2, 100);
+  light2.position.set(-50, 70, -100);
+  scene.add(light2);
+
+  var light3 = new THREE.PointLight(0xFF88AA, 2, 100);
+  light3.position.set(50, 70, -100);
+  scene.add(light3);
+
+  var light4 = new THREE.PointLight(0x9977FF, 2, 100);
+  light4.position.set(-50, 70, 100);
+  scene.add(light4);
+
+  var ambientLight = new THREE.AmbientLight(0xFFBBBB, 1000000);
+  scene.add(ambientLight);
+
+
+  //the ground, creeeepy
+  var groundTexture = THREE.ImageUtils.loadTexture('textures/ground.jpg');
+  groundTexture.wrapS = THREE.RepeatWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat = new THREE.Vector2(50, 50);
+  groundTexture.anisotropy = renderer.getMaxAnisotropy();
+
+  var groundMaterial = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    specular: 0xffffff,
+    shininess: 50,
+    shading: THREE.FlatShading,
+    map: groundTexture
+  });
+
+  var geometry = new THREE.PlaneBufferGeometry(1000, 1000);
+
+  var ground = new THREE.Mesh(geometry, groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+
+  var zebossgeometry = new THREE.OctahedronGeometry(20, 0);
+  var zebossTexture = THREE.ImageUtils.loadTexture('textures/fire.jpg');
+  zebossTexture.wrapS = THREE.RepeatWrapping;
+  zebossTexture.wrapT = THREE.RepeatWrapping;
+  zebossTexture.repeat = new THREE.Vector2(50, 50);
+  zebossTexture.anisotropy = renderer.getMaxAnisotropy();
+  var zebossmaterial = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    specular: 0xffffff,
+    shininess: 50,
+    shading: THREE.FlatShading,
+    map: zebossTexture});
+  var zeboss = new THREE.Mesh(zebossgeometry, zebossmaterial);
+  zeboss.position.set(50,50,50);
+  scene.add(zeboss);
+
+  var planetGeometry = new THREE.SphereGeometry(20, 100, 100);
+  var planetTexture = THREE.ImageUtils.loadTexture('textures/planet.jpg', THREE.SphericalRefractionMapping);
+  planetTexture.wrapS = THREE.RepeatWrapping;
+  planetTexture.wrapT = THREE.RepeatWrapping;
+  planetTexture.anisotropy = renderer.getMaxAnisotropy();
+  var planetMaterial = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    specular: 0xffffff,
+    shininess: 50,
+    shading: THREE.FlatShading,
+    map: planetTexture});
+  planet = new THREE.Mesh(planetGeometry, planetMaterial);
+  planet.position.set(-100,150,-80);
+  scene.add(planet);
+
+  var textMaterial = new THREE.MeshPhongMaterial({
+      color: 0xFF0022
+    });
+  var textScore = new THREE.TextGeometry( 'Beware', {
+      font: 'helvetiker',
+      height: 10,
+      size: 30,
+    });
+  var textMesh = new THREE.Mesh( textScore, textMaterial );
+  textMesh.rotation.y = -Math.PI / 2;
+  textMesh.rotation.z = -Math.PI / 4;
+
+  textMesh.position.set(170,120,10);
+  scene.add(textMesh);
+
+  var tutTextMaterial = new THREE.MeshPhongMaterial({
+      color: 0xA52A2A
+    });
+  var tutText = new THREE.TextGeometry( 'Tutankhamun', {
+      font: 'helvetiker',
+      height: 10,
+      size: 30,
+    });
+  var tutTextMesh = new THREE.Mesh( tutText, tutTextMaterial );
+  tutTextMesh.rotation.y = -Math.PI / 2;
+  //tutTextMesh.rotation.z = -Math.PI / 4;
+
+  tutTextMesh.position.set(-160,40,-95);
+  scene.add(tutTextMesh);
+
+
+
+    //I'm trying to add a gun that stays in place
+    staystill = new THREE.Scene();
+    var geometry = new THREE.TorusGeometry( 5, 3, 16, 100 );
+    var material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+    var torus = new THREE.Mesh( geometry, material );
+    torus.position.set(0,0,0);
+    staystill.add( torus );
+
+
+
+    //make this look reaaaaaaally creepy
+    //var fog = new THREE.FogExp2(0xFF0000, .002);
+    //scene.fog = fog; //won't render properly on android -_-
+
+    //forgot these
+    clock = new THREE.Clock();
+    animate();
+
+
+  }
+  //end init()
+
+  init(); //run the init() function
+
+  var ticker = 0;
+  var ticker2 = 0;
+
+  var id;
+
+  function animate() {
+    var elapsedSeconds = clock.getElapsedTime();
+    id = requestAnimationFrame(animate);
+    resize();
+
+    camera.updateProjectionMatrix();
+
+    controls.update();
+
+
+    //we're autofiring since I can't seem to do both fullscreen control and firing from clicks
+    if((((elapsedSeconds/1000) % 10) >= 0) && (((elapsedSeconds/1000) % 10) <=1))
+    {
+      ticker++;
+      ticker2++
+      if(ticker >= 60)
+      {
+        console.log("spawn bullet!");
+        objectList[numObjects] = new bullet(camera.position.x,camera.position.y,camera.position.z);
+
+        ticker = 0;
+      }
+
+      if(ticker2 >= 150)
+      {
+        console.log("spawn enemy!");
+        var randx = 0;
+        var randy = 0;
+        var randz = 0;
+
+
+        var randNeg = Math.floor((Math.random() * 2)) + 1;
+        if (randNeg == 1)
+        randx = Math.floor((Math.random() * 1000)) + 1;
+        else
+        randx = -Math.floor((Math.random() * 1000)) + 1;
+
+        randy = Math.floor((Math.random() * 750)) + 1;
+
+        randNeg = Math.floor((Math.random() * 2)) + 1;
+        if (randNeg == 1)
+        randz = Math.floor((Math.random() * 1000)) + 1;
+        else
+        randz = -Math.floor((Math.random() * 1000)) + 1;
+
+
+
+        objectList[numObjects] = new enemy(randx, randy, randz);
+        ticker2 = 0;
+
+      }
+    }
+
+
+    for (var i = 0; i < numObjects; i++)
+    {
+      if(objectList[i].type ==  "bullet")
+      {
+        bulletPath(objectList[i]);
+        move(objectList[i]);
+      }
+      if(objectList[i].type == "enemy")
+      {
+        move(objectList[i]);
+        enemyattack(objectList[i]);
+      }
+    }
+    collisions();
+
+    planet.rotation.y += .03;
+
+    if (score < -10000)
+    {
+      var gameOverTextMaterial = new THREE.MeshPhongMaterial({
+          color: 0xFFFF00
+        });
+      var gameOverText = new THREE.TextGeometry( 'Game Over', {
+          font: 'helvetiker',
+          height: 2,
+          size: 6,
+        });
+      var gameOverTextMesh = new THREE.Mesh( gameOverText, gameOverTextMaterial );
+      gameOverTextMesh.rotation.y = -Math.PI / 2;
+
+      gameOverTextMesh.position.set(camera.position.x,camera.position.y-10,camera.position.z);
+      scene.add(gameOverTextMesh);
+      cancelAnimationFrame(id);
+    }
+
+    effect.render(scene, camera);
+
+
+
+
+  }
+
+  //various functions
+  function resize() {
+    var width = container.offsetWidth;
+    var height = container.offsetHeight;
+
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(width, height);
+    effect.setSize(width, height);
+  }
+
+
+  function fullscreen() {
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.msRequestFullscreen) {
+      container.msRequestFullscreen();
+    } else if (container.mozRequestFullScreen) {
+      container.mozRequestFullScreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    }
+  }
+
+
+
+
+
+  </script>
+
+
+</body>
+</html>
